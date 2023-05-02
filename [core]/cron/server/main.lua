@@ -1,47 +1,38 @@
 local Jobs = {}
 local LastTime = nil
 
-function RunAt(h, m, cb)
-	Jobs[#Jobs + 1] = {
-		h  = h,
-		m  = m,
-		cb = cb
-	}
+local function runAt(h, m, cb)
+	Jobs[#Jobs+1] = {h = h, m = m, cb = cb}
 end
 
-function GetTime()
-	local timestamp = os.time()
-	local d = os.date('*t', timestamp).wday
-	local h = tonumber(os.date('%H', timestamp))
-	local m = tonumber(os.date('%M', timestamp))
-
-	return {d = d, h = h, m = m}
+local function getTime()
+    local timestamp <const> = os.time()
+    local timeTable <const> = os.date('*t', timestamp)
+    return {d = timeTable.wday, h = timeTable.hour, m = timeTable.min}
 end
 
-function OnTime(d, h, m)
-
-	for i=1, #Jobs, 1 do
-		if Jobs[i].h == h and Jobs[i].m == m then
-			Jobs[i].cb(d, h, m)
-		end
-	end
+local function onTime(d, h, m)
+    for _, job in ipairs(Jobs) do
+        if job.h == h and job.m == m then
+            job.cb(d, h, m)
+        end
+    end
 end
 
-function Tick()
-	local time = GetTime()
+local function tick()
+    local time = getTime()
 
-	if time.h ~= LastTime.h or time.m ~= LastTime.m then
-		OnTime(time.d, time.h, time.m)
-		LastTime = time
-	end
+    if time.h ~= LastTime.h or time.m ~= LastTime.m then
+        onTime(time.d, time.h, time.m)
+        LastTime = time
+    end
 
-	SetTimeout(60000, Tick)
+    SetTimeout(60000, tick)
 end
 
-LastTime = GetTime()
+LastTime = getTime()
+tick()
 
-Tick()
-
-AddEventHandler('cron:runAt', function(h, m, cb)
-	RunAt(h, m, cb)
+exports('runAt', function(h, m, cb)
+    runAt(h, m, cb)
 end)

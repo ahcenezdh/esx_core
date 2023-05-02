@@ -1,4 +1,4 @@
-fx_version 'bodacious'
+fx_version 'cerulean'
 
 game 'gta5'
 author 'ESX-Framework & Brayden'
@@ -6,7 +6,7 @@ description 'Offical ESX Legacy Context Menu'
 lua54 'yes'
 version '1.9.4'
 
-ui_page 'index.html'
+ui_page 'web/index.html'
 
 shared_script '@es_extended/imports.lua'
 
@@ -16,7 +16,7 @@ client_scripts {
 }
 
 files {
-    'index.html'
+    'web/**'
 }
 
 dependencies {

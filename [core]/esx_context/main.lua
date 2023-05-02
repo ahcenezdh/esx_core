@@ -1,173 +1,103 @@
-local defaultPosition = "right" -- [ left | center | right ]
 local activeMenu
-local Debug = ESX.GetConfig().EnableDebug
+local Debug <const> = ESX.GetConfig().EnableDebug
 
--- Global functions
--- [ Post | Open | Closed ]
-
-function Post(fn,...)
-	SendNUIMessage({
-		func = fn,
-		args = {...}
-	})
+local function post(fn, ...)
+    SendNUIMessage({func = fn, args = {...}})
 end
 
-function Open(position,eles,onSelect,onClose,canClose)
-	local canClose = canClose == nil and true or canClose
-	activeMenu = {
-		position = position,
-		eles = eles,
-		canClose = canClose,
-		onSelect = onSelect,
-		onClose = onClose
-	}
+local function close()
+    SetNuiFocus(false, false)
 
-	LocalPlayer.state:set("context:active",true)
+    local menu <const> = activeMenu
+    local cb <const> = menu.onClose
 
-	Post("Open",eles,position)
+    activeMenu = nil
+    LocalPlayer.state:set("context:active", false)
+
+    if cb then cb(menu) end
 end
 
-function Closed()
-	SetNuiFocus(false,false)
+local function open(position, eles, onSelect, onClose, canClose)
+    canClose = canClose == nil and true or canClose
+    activeMenu = {position = position, eles = eles, canClose = canClose, onSelect = onSelect, onClose = onClose}
 
-	local menu = activeMenu
-	local cb = menu.onClose
-
-	activeMenu = nil
-
-	LocalPlayer.state:set("context:active",false)
-
-	if cb then
-		cb(menu)
-	end
+    LocalPlayer.state:set("context:active", true)
+    post("Open", eles, position)
 end
 
--- Exports
--- [ Preview | Open | Close ]
+exports("Preview", open)
+exports("Open", function(...) open(...); SetNuiFocus(true, true) end)
+exports("Close", function() if not activeMenu then return end; post("Closed"); close() end)
 
-exports("Preview",Open)
+exports("Refresh", function(eles, position)
+    if not activeMenu then return end
 
-exports("Open",function(...)
-	Open(...)
-	SetNuiFocus(true,true)
+    activeMenu.eles = eles or activeMenu.eles
+    activeMenu.position = position or activeMenu.position
+    post("Open", activeMenu.eles, activeMenu.position)
 end)
 
-exports("Close",function()
-	if not activeMenu then
-		return
-	end
+local nuiCallbacks = {
+    closed = function(data, cb)
+        if not activeMenu or (activeMenu and not activeMenu.canClose) then return cb(false) end
+        cb(true)
+        close()
+    end,
+    selected = function(data, cb)
+        if not activeMenu or not activeMenu.onSelect or not data.index then return end
 
-	Post("Closed")
+        local index <const> = tonumber(data.index)
+        local ele <const> = activeMenu.eles[index]
 
-	Closed()
-end)
+        if not ele or ele.input then return end
 
-exports("Refresh",function(eles,position)
-	if not activeMenu then
-		return
-	end
+        activeMenu:onSelect(ele)
+        if cb then cb('ok') end
+    end,
+    changed = function(data, cb)
+        if not activeMenu or not data.index or not data.value then return end
 
-	activeMenu.eles = eles or activeMenu.eles
-	activeMenu.position = position or activeMenu.position
+        local index <const> = tonumber(data.index)
+        local ele = activeMenu.eles[index]
 
-	Post("Open",activeMenu.eles,activeMenu.position)
-end)
+        if not ele or not ele.input then return end
 
--- NUI Callbacks
--- [ closed | selected | changed ]
+        if ele.inputType == "number" then
+            ele.inputValue = tonumber(data.value)
+            ele.inputValue = ele.inputMin and math.max(ele.inputMin, ele.inputValue) or ele.inputValue
+            ele.inputValue = ele.inputMax and math.min(ele.inputMax, ele.inputValue) or ele.inputValue
+        elseif ele.inputType == "text" or ele.inputType == "radio" then
+            ele.inputValue = data.value
+        end
+        if cb then cb('ok') end
+    end
+}
 
-RegisterNUICallback("closed",function(data,cb)
-	if not activeMenu or (activeMenu and not activeMenu.canClose) then
-		return cb(false)
-	end
-	cb(true)
-	Closed()
-end)
-
-RegisterNUICallback("selected",function(data,cb)
-	if not activeMenu
-	or not activeMenu.onSelect
-	or not data.index 
-	then
-		return
-	end
-
-	local index = tonumber(data.index)
-	local ele = activeMenu.eles[index]
-
-	if not ele
-	or ele.input 
-	then
-		return
-	end
-
-	activeMenu:onSelect(ele)
-	if cb then cb('ok') end
-end)
-
-RegisterNUICallback("changed",function(data,cb)
-	if not activeMenu
-	or not data.index 
-	or not data.value
-	then
-		return
-	end
-
-	local index = tonumber(data.index)
-	local ele = activeMenu.eles[index]
-
-	if not ele
-	or not ele.input 
-	then
-		return
-	end
-
-	if ele.inputType == "number" then
-		ele.inputValue = tonumber(data.value)
-
-		if ele.inputMin then
-			ele.inputValue = math.max(ele.inputMin,ele.inputValue)
-		end
-
-		if ele.inputMax then
-			ele.inputValue = math.min(ele.inputMax,ele.inputValue)
-		end
-	elseif ele.inputType == "text" then
-		ele.inputValue = data.value
-	elseif ele.inputType == "radio" then
-		ele.inputValue = data.value
-	end
-	if cb then cb('ok') end
-end)
-
--- Keybind
+for name, callback in pairs(nuiCallbacks) do
+    RegisterNUICallback(name, callback)
+end
 
 local function focusPreview()
-	if not activeMenu
-	or not activeMenu.onSelect 
-	then
-		return
-	end
-
-	SetNuiFocus(true,true)
+    if not activeMenu or not activeMenu.onSelect then return end
+    SetNuiFocus(true, true)
 end
 
 if PREVIEW_KEYBIND then
-	RegisterCommand("previewContext",focusPreview)
-
-	RegisterKeyMapping("previewContext","Preview Active Context","keyboard",PREVIEW_KEYBIND)
+    RegisterCommand("previewContext", focusPreview, false)
+    RegisterKeyMapping("previewContext", "Preview Active Context", "keyboard", PREVIEW_KEYBIND)
 end
 
-exports("focusPreview",focusPreview)
+exports("focusPreview", focusPreview)
 
 -- Debug/Test
 -- Commands:
 -- [ ctx:preview | ctx:open | ctx:close | ctx:form ]
 
 if Debug then
-	local position = "right"
+	local context <const> = exports["esx_context"]
+	local position <const> = "right"
 
-	local eles = {
+	local eles <const> = {
 	 	{
 	 		unselectable=true,
 	 		icon="fas fa-info-circle",
@@ -195,7 +125,7 @@ if Debug then
 		print("Ele selected",ele.title)
 
 		if ele.name == "close" then
-			exports["esx_context"]:Close()
+			context:Close()
 		end
 
 		if ele.name ~= "submit" then
@@ -208,7 +138,7 @@ if Debug then
 			end
 		end
 
-		exports["esx_context"]:Close()
+		context:Close()
 	end
 
 	local function onClose(menu)
@@ -216,19 +146,19 @@ if Debug then
 	end
 
 	RegisterCommand("ctx:preview",function()
-		exports["esx_context"]:Preview(position,eles)
-	end)
+		context:Preview(position,eles)
+	end, false)
 
 	RegisterCommand("ctx:open",function()
-		exports["esx_context"]:Open(position,eles,onSelect,onClose)
-	end)
+		context:Open(position,eles,onSelect,onClose)
+	end, false)
 
 	RegisterCommand("ctx:close",function()
-		exports["esx_context"]:Close()
-	end)
+		context:Close()
+	end, false)
 
 	RegisterCommand("ctx:form",function()
-		local eles = {
+		local eles <const> = {
 			{
 				unselectable=true,
 				icon="fas fa-info-circle",
@@ -268,6 +198,6 @@ if Debug then
 			}
 		}
 
-		exports["esx_context"]:Open(position,eles,onSelect,onClose)
-	end)
+		context:Open(position, eles, onSelect, onClose)
+	end, false)
 end

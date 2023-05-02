@@ -1,4 +1,4 @@
-fx_version 'adamant'
+fx_version 'cerulean'
 
 game 'gta5'
 
@@ -42,7 +42,7 @@ client_scripts {
 	'client/modules/callback.lua',
 
 	'client/main.lua',
-	
+
 	'common/modules/*.lua',
 	'common/functions.lua',
 
